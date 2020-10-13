@@ -58,7 +58,9 @@ def s_bat(title):
 # 所有类别
 def sort():
     html4 = requests.get(url4, headers=headers)
-    content4 = html4.content.decode('utf-8')
+    # content4 = html4.content.decode('utf-8')
+    content4 = html4.text
+    # print(content4)
     con = json.loads(content4)['rescont']
     ids = []
     for x, y in enumerate(con):
@@ -72,7 +74,7 @@ def d_sort(id, page=1):
     pool = Pool(4)  # 进程池对象
     for p in range(1, page+1):
         url = url6.format(id, p)
-        html6 = requests.get(url, headers=headers)
+        html6 = requests.get(url)
         content = html6.content.decode('utf-8')
         con = json.loads(content)['rescont']['data']
         # print(con)
@@ -106,19 +108,22 @@ def info(id):
     content = html2.content.decode('utf-8')
     title = json.loads(content)['rescont']['title']
     title = re.sub(r'\?|\“|\”|\/|\\|\<|\>|\*||||\:| ', '', title)
-    # 视频路径
+    # 视频路径,获取到一个.m3u8文件，不过这不是最后的文件,
+    # 在它的最后一行有个链接和scr拼接之后才是真正存放ts的.m3u8
     con = json.loads(content)['rescont']['videopath']
-    print('视频地址', con)
-    scr = re.sub(r'index.*$', '', con)
+    scr = re.sub(r'index.*$', '1000kb/hls/', con)
+    rcon = scr + 'index.m3u8'
+    print('视频地址', rcon)
     # print(scr)
     # 获取.m3u8文件
-    text = requests.get(con).content.decode('utf-8')
+    text = requests.get(rcon).content.decode('utf-8')
     # print(text)
     # 匹配出ts文件名
     ts = re.findall(r'(.+?\.ts)', text)
     # print(ts)
     # 获取加密值
-    key = requests.get(scr+'key.key').content.decode('utf-8')
+    key = requests.get(scr+'key.key').content
+    print(key)
     print('正在下载', title)
     a_path = path + '\\' + title
     d_path = path + '\\' + 'dowlod' + '\\' + title + '.MP4'
@@ -162,22 +167,25 @@ def getVideoFile(b_path, url, key):
     print('准备从', url, '下载文件')
     # 下载注意开启流
     try:
-        r = requests.get(url, timeout=(3, 10), stream=True)
-    except Exception:
-        print("下载失败，超时")
-    else:
+        r = requests.get(url, timeout=(3, 10), stream=True).content
         # 开始构建解密方法
         mode = AES.MODE_CBC
-        cryptor = AES.new(key.encode('utf-8'), mode)
-        if r.content:
+        cryptor = AES.new(key, mode)
+        if r:
             try:
+                # 因为CBC加密解密的数据都要是16字节的倍数，所以在此检测ts文件是否是16字节的倍数。
+                n = len(r) % 16
+                r = r + b"0"*n
+                # print(len(r))
                 with open(b_path, 'wb') as f:
-                    f.write(cryptor.decrypt(r.content))
+                    f.write(cryptor.decrypt(r))
                 print('文件下载成功')
-            except Exception:
-                print('文件保存失败')
+            except Exception as e:
+                print('文件保存失败', e)
         else:
             print('文件下载失败')
+    except Exception as e:
+        print("下载失败，超时", e)
 
 
 def main():
